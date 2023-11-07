@@ -73,6 +73,13 @@ fn main() -> Result<(), String> {
                 .help("Enable trace logs")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new("stream_stdout")
+                .long("stream-stdout")
+                .value_name("STREAM_STDOUT")
+                .help("Print the output to stdout in the streaming way")
+                .action(ArgAction::SetTrue),
+        )
         .get_matches();
 
     // model alias
@@ -126,6 +133,11 @@ fn main() -> Result<(), String> {
     println!("[INFO] Log enable: {enable}", enable = log_enable);
     options.log_enable = log_enable;
 
+    // stream stdout
+    let stream_stdout = matches.get_flag("stream_stdout");
+    println!("[INFO] Stream stdout: {enable}", enable = stream_stdout);
+    options.stream_stdout = stream_stdout;
+
     // load the model into wasi-nn
     let graph =
         wasi_nn::GraphBuilder::new(wasi_nn::GraphEncoding::Ggml, wasi_nn::ExecutionTarget::AUTO)
@@ -157,16 +169,18 @@ fn main() -> Result<(), String> {
     // execute the inference
     context.compute().expect("Failed to complete inference");
 
-    // retrieve the output
-    let mut output_buffer = vec![0u8; *CTX_SIZE.get().unwrap()];
-    let mut output_size = context
-        .get_output(0, &mut output_buffer)
-        .expect("Failed to get output tensor");
-    output_size = std::cmp::min(*CTX_SIZE.get().unwrap(), output_size);
-    let output = String::from_utf8_lossy(&output_buffer[..output_size]).to_string();
+    if !stream_stdout {
+        // retrieve the output
+        let mut output_buffer = vec![0u8; *CTX_SIZE.get().unwrap()];
+        let mut output_size = context
+            .get_output(0, &mut output_buffer)
+            .expect("Failed to get output tensor");
+        output_size = std::cmp::min(*CTX_SIZE.get().unwrap(), output_size);
+        let output = String::from_utf8_lossy(&output_buffer[..output_size]).to_string();
 
-    println!("\nprompt: {}", &prompt);
-    println!("\noutput: {}", output);
+        println!("\nprompt: {}", &prompt);
+        println!("\noutput: {}", output);
+    }
 
     Ok(())
 }
@@ -175,6 +189,8 @@ fn main() -> Result<(), String> {
 struct Options {
     #[serde(rename = "enable-log")]
     log_enable: bool,
+    #[serde(rename = "stream-stdout")]
+    stream_stdout: bool,
     #[serde(rename = "ctx-size")]
     ctx_size: u64,
     #[serde(rename = "n-predict")]
